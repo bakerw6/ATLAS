@@ -1,0 +1,196 @@
+import uproot
+import matplotlib.pyplot as plt
+import numpy as np 
+import awkward as ak
+
+def muRoI(filepath):
+    barrel = []
+    barrel_pileup = []
+    endcaps = []
+    endcaps_pileup = []
+    
+    for file in filepath:
+        with uproot.open(file) as file:
+            tree = file['trees_DV_']
+            
+            branches = tree.arrays(['muRoIClus_eta', 'muRoIClus_nRoI', 'pileupWeight'], library='ak')
+            
+            etas_array = ak.to_numpy(ak.flatten(branches['muRoIClus_eta'], axis=None))
+            nRoI_array = ak.to_numpy(ak.flatten(branches['muRoIClus_nRoI'], axis=None))
+            pileup_array = ak.to_numpy(ak.flatten(branches['pileupWeight'], axis=None)).astype(np.float64)  # Convert to double precision
+
+            assert len(etas_array) == len(nRoI_array) == len(pileup_array), "Array lengths do not match"
+            
+            for eta, nRoI, pileup in zip(etas_array, nRoI_array, pileup_array):
+                if np.abs(eta) < 0.7:
+                    barrel.append(nRoI)
+                    barrel_pileup.append(pileup)
+
+                elif 1.3 < np.abs(eta) < 2.5:
+                    endcaps.append(nRoI)
+                    endcaps_pileup.append(pileup)
+
+    return np.array(barrel), np.array(endcaps), np.array(barrel_pileup), np.array(endcaps_pileup)
+
+# file paths 
+# datafiles = []
+# for i in range(1, 21):
+#     if i < 10:
+#         file_path = f'/afs/cern.ch/user/b/bawong/eos/project/data/group.phys-exotics.data18_13TeV.periodF.physics_Main.231025.trees.root/group.phys-exotics.35265425._00000{i}.trees.root'
+#         datafiles.append(file_path)
+#     else:
+#         file_path = f'/afs/cern.ch/user/b/bawong/eos/project/data/group.phys-exotics.data18_13TeV.periodF.physics_Main.231025.trees.root/group.phys-exotics.35265425._0000{i}.trees.root'
+#         datafiles.append(file_path)
+# datafiles.pop(18) # no 19th file
+
+
+# File Paths
+MC_path = '/afs/cern.ch/user/b/bawong/eos/project/MC'
+
+# Paths to the combined datasets
+combined_MC = {
+    'mH125_mS5': [MC_path + '/mS5/mH125_mS5_combined.root'],
+    'mH125_mS35': [MC_path + '/mS35/mH125_mS35_combined.root'],
+    'mH125_mS55': [MC_path + '/mS55/mH125_mS55_combined.root'],
+    'mH1000_mS50': [MC_path + '/mS50/mH1000_mS50_combined.root'],
+    'mH1000_mS475': [MC_path + '/mS475/mH1000_mS475_combined.root']
+}
+
+# Paths to the individual datasets
+mH125_mS5_campaigns = {
+    'mH125_mS5_a': [MC_path + '/mS5/mH125_mS5_a.root'],
+    'mH125_mS5_d': [MC_path + '/mS5/mH125_mS5_d.root'],
+    'mH125_mS5_e': [MC_path + '/mS5/mH125_mS5_e.root']
+}
+
+# Function to process and organize the results
+def processing(datasets):
+    results = {}
+    for key, dataset_path in datasets.items():
+        barrel, endcaps, barrel_pileup, endcap_pileup = muRoI(dataset_path)
+        results[key] = {
+            'Barrel': barrel,
+            'Endcaps': endcaps,
+            'Barrel_pileup': barrel_pileup,
+            'Endcaps_pileup': endcap_pileup
+        }
+    return results
+
+combined_dict = processing(combined_MC)
+mH125_mS5_campaigns_dict = processing(mH125_mS5_campaigns)
+
+# Histogram Plotting
+
+def histograms(ax, dictionary, location, colors):
+    num = 0 
+    for key, data in dictionary.items():
+        values = data[location]  # Access the values for the given location (Barrel or Endcaps)
+        pileup = data[f'{location}_pileup']  # Access the pileup weights for the given location
+        ax.hist(values, bins=bins, density=density, weights=pileup, histtype=histtype, 
+                edgecolor=colors[num], label=key)  # Plot histogram with correct parameters
+        num += 1
+
+bins = np.linspace(-0.5, 10.5, 12)
+density = True 
+histtype = 'step'
+edgecolors_combined = ['r', 'b', 'g', 'm', 'k']
+edgecolors_campaigns = ['r', 'b', 'g']
+
+major_ticks_x = np.arange(0, 11, 2)
+minor_ticks_x = np.arange(0, 11, 0.5)
+major_ticks_y = np.arange(0, 0.75, 0.1)
+minor_ticks_y0= np.arange(0, 0.75, 0.025)
+direction='in'
+length_major = 10
+length_minor = 5
+top=True
+right=True
+axis = 'both'
+
+# Plot 1: Histogram for Barrel
+fig_barrel, ax_barrel = plt.subplots(figsize=(8, 6))
+histograms(ax_barrel, combined_dict, 'Barrel', edgecolors_combined)
+
+ax_barrel.set_xlabel('Number of RoIs')
+ax_barrel.set_ylabel('Fraction of Events')
+ax_barrel.set_title('Histogram for Barrel')
+
+ax_barrel.set_xticks(major_ticks_x)
+ax_barrel.set_xticks(minor_ticks_x, minor=True)
+ax_barrel.set_yticks(major_ticks_y)
+ax_barrel.set_yticks(minor_ticks_y0, minor=True)
+
+ax_barrel.legend()
+ax_barrel.tick_params(axis=axis, direction=direction, length=length_major, which='major', top=top, right=right)
+ax_barrel.tick_params(axis=axis, direction=direction, length=length_minor, which='minor', top=top, right=right)
+
+ax_barrel.set_xlim(2, 11)
+plt.tight_layout()
+plt.savefig('Hist1.pdf')
+plt.close()
+
+# Plot 2: Histogram for Endcaps
+fig_endcaps, ax_endcaps = plt.subplots(figsize=(8, 6))
+histograms(ax_endcaps, combined_dict, 'Endcaps', edgecolors_combined)
+
+ax_endcaps.set_xlabel('Number of RoIs')
+ax_endcaps.set_ylabel('Fraction of Events')
+ax_endcaps.set_title('Histogram for Endcaps')
+
+ax_endcaps.set_xticks(major_ticks_x)
+ax_endcaps.set_xticks(minor_ticks_x, minor=True)
+ax_endcaps.set_yticks(major_ticks_y)
+ax_endcaps.set_yticks(minor_ticks_y0, minor=True)
+
+ax_endcaps.legend()
+ax_endcaps.tick_params(axis=axis, direction=direction, length=length_major, which='major', top=top, right=right)
+ax_endcaps.tick_params(axis=axis, direction=direction, length=length_minor, which='minor', top=top, right=right)
+
+ax_endcaps.set_xlim(2, 11)
+plt.tight_layout()
+plt.savefig('Hist2.pdf')
+plt.close()
+
+# Plot 3: mH125_mS5 Barrel
+fig_mH125_mS5_Barrel, ax_mH125_mS5_Barrel = plt.subplots(figsize=(8, 6))
+histograms(ax_mH125_mS5_Barrel, mH125_mS5_campaigns_dict, 'Barrel', edgecolors_campaigns)
+
+ax_mH125_mS5_Barrel.set_xlabel('Number of RoIs')
+ax_mH125_mS5_Barrel.set_ylabel('Fraction of Events')
+ax_mH125_mS5_Barrel.set_title('Histogram for mH125_mS5 Barrel')
+
+ax_mH125_mS5_Barrel.set_xticks(major_ticks_x)
+ax_mH125_mS5_Barrel.set_xticks(minor_ticks_x, minor=True)
+ax_mH125_mS5_Barrel.set_yticks(major_ticks_y)
+ax_mH125_mS5_Barrel.set_yticks(minor_ticks_y0, minor=True)
+
+ax_mH125_mS5_Barrel.legend()
+ax_mH125_mS5_Barrel.tick_params(axis=axis, direction=direction, length=length_major, which='major', top=top, right=right)
+ax_mH125_mS5_Barrel.tick_params(axis=axis, direction=direction, length=length_minor, which='minor', top=top, right=right)
+
+ax_mH125_mS5_Barrel.set_xlim(2, 11)
+plt.tight_layout()
+plt.savefig('Hist3.pdf')
+plt.close()
+
+# Plot 4: mH125_mS5 Endcaps
+fig_mH125_mS5_Endcaps, ax_mH125_mS5_Endcaps = plt.subplots(figsize=(8, 6))
+histograms(ax_mH125_mS5_Endcaps, mH125_mS5_campaigns_dict, 'Endcaps', edgecolors_campaigns)
+
+ax_mH125_mS5_Endcaps.set_xlabel('Number of RoIs')
+ax_mH125_mS5_Endcaps.set_ylabel('Fraction of Events')
+ax_mH125_mS5_Endcaps.set_title('Histogram for mH125_mS5 Endcaps')
+
+ax_mH125_mS5_Endcaps.set_xticks(major_ticks_x)
+ax_mH125_mS5_Endcaps.set_xticks(minor_ticks_x, minor=True)
+ax_mH125_mS5_Endcaps.set_yticks(major_ticks_y)
+ax_mH125_mS5_Endcaps.set_yticks(minor_ticks_y0, minor=True)
+
+ax_mH125_mS5_Endcaps.legend()
+ax_mH125_mS5_Endcaps.tick_params(axis=axis, direction=direction, length=length_major, which='major', top=top, right=right)
+ax_mH125_mS5_Endcaps.tick_params(axis=axis, direction=direction, length=length_minor, which='minor', top=top, right=right)
+
+ax_mH125_mS5_Endcaps.set_xlim(2, 11)
+plt.tight_layout()
+plt.savefig('Hist4.pdf')
+plt.close()
