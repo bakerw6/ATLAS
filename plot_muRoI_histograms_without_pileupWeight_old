@@ -1,0 +1,103 @@
+import uproot
+import matplotlib.pyplot as plt
+import numpy as np 
+import awkward as ak
+
+def muRoI(filepath):
+    barrel = []
+    endcaps = []
+
+    for file in filepath:
+        with uproot.open(file) as file:
+            tree = file['trees_DV_']
+
+            for arrays in tree.iterate(['muRoIClus_eta', 'muRoIClus_nRoI'], library='ak'):
+                etas = arrays['muRoIClus_eta']
+                nRoIs = arrays['muRoIClus_nRoI']
+                for eta, nRoIs in zip(etas, nRoIs):
+                    if abs(eta) < 0.7:
+                        barrel.extend(ak.flatten(nRoIs, axis=None))
+                    elif 1.3 < abs(eta) < 2.5:
+                        endcaps.extend(ak.flatten(nRoIs, axis=None))
+
+    return np.array(barrel), np.array(endcaps)
+
+MC_path = '/afs/cern.ch/user/b/bawong/eos/project/MC'
+
+mH125_mS5_combined = [MC_path + '/mS5/mH125_mS5_combined.root']  # mS5
+mH125_mS35_combined = [MC_path + '/mS35/mH125_mS35_combined.root']  # mS35
+mH125_mS55_combined = [MC_path + '/mS55/mH125_mS55_combined.root']  # mS55
+mH1000_mS50_combined = [MC_path + '/mS50/mH1000_mS50_combined.root']  # mS50
+mH1000_mS475_combined = [MC_path + '/mS475/mH1000_mS475_combined.root']  # mS475
+
+mH125_mS5_a = [MC_path + '/mS5/mH125_mS5_a.root']
+mH125_mS5_d = [MC_path + '/mS5/mH125_mS5_d.root']
+mH125_mS5_e = [MC_path + '/mS5/mH125_mS5_e.root']
+
+Barrel vs Endcaps
+mH125_mS5_barrel, mH125_mS5_endcaps, mH125_mS5_barrel_pileup, mH125_mS5_endcap_pileup = muRoI(mH125_mS5_combined)
+mH125_mS35_barrel, mH125_mS35_endcaps, mH125_mS35_barrel_pileup, mH125_mS35_endcap_pileup  = muRoI(mH125_mS35_combined)
+mH125_mS55_barrel, mH125_mS55_endcaps, mH125_mS55_barrel_pileup, mH125_mS55_endcap_pileup = muRoI(mH125_mS55_combined)
+mH1000_mS50_barrel, mH1000_mS50_endcaps, mH1000_mS50_barrel_pileup, mH1000_mS50_endcap_pileup = muRoI(mH1000_mS50_combined)
+mH1000_mS475__barrel, mH1000_mS475_endcaps, mH1000_mS475_barrel_pileup, mH1000_mS475_endcap_pileup = muRoI(mH1000_mS475_combined)
+
+mH125_mS5_a_barrel, mH125_mS5_a_endcaps, mH125_mS5_barrel_a_pileup, mH125_mS5_endcap_a_pileup = muRoI(mH125_mS5_a)
+mH125_mS5_d_barrel, mH125_mS5_d_endcaps, mH125_mS5_barrel_d_pileup, mH125_mS5_endcap_d_pileup = muRoI(mH125_mS5_d)
+mH125_mS5_e_barrel, mH125_mS5_e_endcaps, mH125_mS5_barrel_e_pileup, mH125_mS5_endcap_e_pileup = muRoI(mH125_mS5_e)
+
+bins = np.linspace(-0.5, 10.5, 12)
+
+fig, axes = plt.subplots(nrows=2, ncols=2, figsize=(12, 10))
+ax0, ax1, ax2, ax3 = axes.flatten()
+
+ax0.hist(mH125_mS5_barrel, bins=bins, density=True, histtype='step', edgecolor='r', label='mH125_mS5')
+ax0.hist(mH125_mS35_barrel, bins=bins, density=True, histtype='step', edgecolor='b', label='mH125_mS35')
+ax0.hist(mH125_mS55_barrel, bins=bins, density=True, histtype='step', edgecolor='g', label='mH125_mS55')
+ax0.hist(mH1000_mS50_barrel, bins=bins, density=True, histtype='step', edgecolor='m', label='mH1000_mS50')
+ax0.hist(mH1000_mS475__barrel, bins=bins, density=True, histtype='step', edgecolor='k', label='mH1000_mS475')
+ax0.set_title('Histogram for Barrel')
+ax0.set_xlabel('$N_{RoI}$')
+ax0.set_ylabel('Fraction of events')
+ax0.legend()
+ax0.tick_params(axis='both', direction='in', which='major', top=True, right=True)
+ax0.tick_params(axis='both', direction='in', which='minor', top=True, right=True)
+ax0.set_xlim(2, 8)
+
+ax1.hist(mH125_mS5_endcaps, bins=bins, density=True, histtype='step', edgecolor='r', label='mH125_mS5')
+ax1.hist(mH125_mS35_endcaps, bins=bins, density=True, histtype='step', edgecolor='b', label='mH125_mS35')
+ax1.hist(mH125_mS55_endcaps, bins=bins, density=True, histtype='step', edgecolor='g', label='mH125_mS55')
+ax1.hist(mH1000_mS50_endcaps, bins=bins, density=True, histtype='step', edgecolor='m', label='mH1000_mS50')
+ax1.hist(mH1000_mS475_endcaps, bins=bins, density=True, histtype='step', edgecolor='k', label='mH1000_mS475')
+ax1.set_title('Histogram for Endcaps')
+ax1.set_xlabel('$N_{RoI}$')
+ax1.set_ylabel('Fraction of events')
+ax1.legend()
+ax1.tick_params(axis='both', direction='in', which='major', top=True, right=True)
+ax1.tick_params(axis='both', direction='in', which='minor', top=True, right=True)
+ax1.set_xlim(2, 11)
+
+ax2.hist(mH125_mS5_a_barrel, bins=bins, density=True, histtype='step', edgecolor='r', label='mH125_mS5_a')
+ax2.hist(mH125_mS5_d_barrel, bins=bins, density=True, histtype='step', edgecolor='b', label='mH125_mS5_d')
+ax2.hist(mH125_mS5_e_barrel, bins=bins, density=True, histtype='step', edgecolor='g', label='mH125_mS5_e')
+ax2.set_title('Histogram for mH125_mS5 Barrel')
+ax2.set_xlabel('$N_{RoI}$')
+ax2.set_ylabel('Fraction of events')
+ax2.legend()
+ax2.tick_params(axis='both', direction='in', which='major', top=True, right=True)
+ax2.tick_params(axis='both', direction='in', which='minor', top=True, right=True)
+ax2.set_xlim(2, 8)
+
+ax3.hist(mH125_mS5_a_endcaps, bins=bins, density=True, histtype='step', edgecolor='r', label='mH125_mS5_a')
+ax3.hist(mH125_mS5_d_endcaps, bins=bins, density=True, histtype='step', edgecolor='b', label='mH125_mS5_d')
+ax3.hist(mH125_mS5_e_endcaps, bins=bins, density=True, histtype='step', edgecolor='g', label='mH125_mS5_e')
+ax3.set_title('Histogram for mH125_mS5 Endcaps')
+ax3.set_xlabel('$N_{RoI}$')
+ax3.set_ylabel('Fraction of events')
+ax3.legend()
+ax3.tick_params(axis='both', direction='in', which='major', top=True, right=True)
+ax3.tick_params(axis='both', direction='in', which='minor', top=True, right=True)
+ax3.set_xlim(2, 11)
+
+plt.tight_layout()
+plt.savefig('Hist4_V1.pdf')
+print("Plot saved")
