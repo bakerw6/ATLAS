@@ -1,0 +1,137 @@
+import uproot
+import matplotlib.pyplot as plt
+import numpy as np 
+import awkward as ak
+import os
+import pickle
+
+"""
+Code signal and background, background and signal/background
+MC (signal) data: mH125_mS5, mH125_mS35, mH125_mS55, mH1000_mS50, mH1000_mS475
+Data (background) periods: B, F, M, Q
+"""
+
+# FILE PATHS
+MC_path = '/afs/cern.ch/user/b/bawong/eos/project/MC'
+Data_path = '/afs/cern.ch/user/b/bawong/eos/project/data'
+
+# MC_path_og = '/eos/project-m/mathusla/MS/MSSignals'
+# Data_path_og = '/eos/project-m/mathusla/MS/MSMain' 
+
+combined_MC = { # Paths to the combined datasets
+    'mH125_mS5': [MC_path + '/mS5/mH125_mS5_combined.root'],
+    'mH125_mS35': [MC_path + '/mS35/mH125_mS35_combined.root'],
+    'mH125_mS55': [MC_path + '/mS55/mH125_mS55_combined.root'],
+    'mH1000_mS50': [MC_path + '/mS50/mH1000_mS50_combined.root'],
+    'mH1000_mS475': [MC_path + '/mS475/mH1000_mS475_combined.root']
+}
+
+combined_data = { # Data Files
+    'Period_B':[Data_path + '/group.phys-exotics.data18_13TeV.periodB.physics_Main.231025.trees.root'],
+    'period_F':[Data_path + '/group.phys-exotics.data18_13TeV.periodF.physics_Main.231025.trees.root'],
+    'Period_M':[Data_path + '/group.phys-exotics.data18_13TeV.periodM.physics_Main.231025.trees.root'],
+    'Period_Q':[Data_path + '/group.phys-exotics.data18_13TeV.periodQ.physics_Main.231025.trees.root']
+}
+
+def collect_root_files(data_folders):
+    file_dict = {}
+    for key, folder_paths in data_folders.items():
+        root_files = []
+        for folder in folder_paths:
+                for file in os.listdir(folder):
+                    file_path = os.path.join(folder, file)
+                    if os.path.isfile(file_path) and file.endswith('.root'):
+                        root_files.append(file_path)
+        file_dict[key] = root_files
+    return file_dict
+
+data_dict = collect_root_files(combined_data)
+
+print(data_dict.keys())
+
+def save_data_dict_to_txt(data_dict, output_file):
+    with open(output_file, 'w') as f:
+        for key, file_list in data_dict.items():
+            f.write(f"{key}:\n")
+            for file in file_list:
+                f.write(f"  {file}\n")
+            f.write("\n")
+
+# Save the data_dict to a text file
+output_file = 'data_dict_output.txt'
+save_data_dict_to_txt(data_dict, output_file)
+
+print(f"Data dictionary saved to {output_file}")
+
+def muRoI(filepath):
+    barrel = []
+    barrel_pileup = []
+    endcaps = []
+    endcaps_pileup = []
+
+    for file in filepath:
+        with uproot.open(file) as file:
+            tree = file['trees_DV_']
+            
+            branches = tree.arrays(['muRoIClus_eta', 'muRoIClus_nRoI', 'pileupWeight'], library='ak')
+            
+            etas_array = branches['muRoIClus_eta']
+            nRoI_array = branches['muRoIClus_nRoI']
+            pileup_array = branches['pileupWeight']
+            
+            etas_array_flat = ak.flatten(etas_array, axis=None)
+            nRoI_array_flat = ak.flatten(nRoI_array, axis=None)
+
+            pileup_repeated = ak.broadcast_arrays(pileup_array, etas_array)[0]
+            pileup_flat = ak.flatten(pileup_repeated)
+
+            for eta, nRoI, pileup in zip(etas_array_flat, nRoI_array_flat, pileup_flat):
+                if np.abs(eta) < 0.7:
+                    barrel.append(nRoI)
+                    barrel_pileup.append(pileup)
+
+                elif 1.3 < np.abs(eta) < 2.5:
+                    endcaps.append(nRoI)
+                    endcaps_pileup.append(pileup)
+
+    return np.array(barrel), np.array(endcaps), np.array(barrel_pileup), np.array(endcaps_pileup)
+
+def processing(datasets):
+    results = {}
+    for key, dataset_path in datasets.items():
+        barrel, endcaps, barrel_pileup, endcap_pileup = muRoI(dataset_path)
+        results[key] = {
+            'Barrel': barrel,
+            'Endcaps': endcaps,
+            'Barrel_pileup': barrel_pileup,
+            'Endcaps_pileup': endcap_pileup
+        }
+    return results
+
+combined_MC_dict = processing(combined_MC)
+combined_data_dict = processing(data_dict)
+
+def save_results(results, filename):
+    """Save the processed results using pickle."""
+    with open(filename, 'wb') as f:
+        pickle.dump(results, f)
+    print(f"Results saved to {filename}")
+    
+save_results(combined_MC_dict, 'combined_MC_results.pkl')
+save_results(combined_data_dict, 'combined_data_results1.pkl')
+
+bkg_barrel_concat = np.concatenate([
+    combined_data_dict[key]['Barrel'] 
+    for key in ['Period_B', 'period_F', 'Period_M', 'Period_Q']
+])
+bkg_endcaps_concat = np.concatenate([
+    combined_data_dict[key]['Endcaps'] 
+    for key in ['Period_B', 'period_F', 'Period_M', 'Period_Q']
+])
+
+print('Signal data concatenated')
+
+np.save('npy/bkg_barrel_concat1.npy', bkg_barrel_concat)
+np.save('npy/bkg_endcaps_concat1.npy', bkg_endcaps_concat)
+
+print('Finished saving concatenated arrays in .npy format')
