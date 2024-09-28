@@ -1,0 +1,173 @@
+import matplotlib.pyplot as plt
+import numpy as np 
+import awkward as ak
+import pickle
+
+"""
+This plots
+1. Signal in the Barrel
+2. Signal/Background Ratio in the Barrel
+3. Signa in the Endcaps
+4. Signal/Background Ratio in the Endcaps
+"""
+
+def load_results(filename):
+    """Load the results from a pickle file."""
+    with open(filename, 'rb') as f:
+        results = pickle.load(f)
+    return results
+
+combined_MC_dict = load_results('combined_MC_results.pkl')
+combined_data_dict = load_results('combined_data_results.pkl')
+bkg_barrel_concat = np.load('npy/bkg_barrel_concat1.npy')
+bkg_endcaps_concat = np.load('npy/bkg_endcaps_concat1.npy')
+
+
+bins = np.linspace(-0.5, 15.5, 16)
+density = True 
+histtype = 'step'
+edgecolors_combined_MC = ['r', 'b', 'lime', 'm', 'c']
+edgecolors_combined_data = ['k', '#A0A0A0', '#FF8000', '#99004C']
+edgecolors_campaigns_MC = ['r', 'b', 'g']
+
+major_ticks_x = np.arange(0, 14, 2)
+minor_ticks_x = np.arange(0, 14, 0.5)
+major_ticks_y = np.arange(0, 1, 0.1)
+minor_ticks_y= np.arange(0, 1, 0.025)
+
+direction='in'
+length_major = 10
+length_minor = 5
+top=True
+right=True
+axis = 'both'
+
+
+def histograms(ax, dictionary, location, colors, pileup):
+    num = 0 
+    if pileup==False:
+        for key, data in dictionary.items():
+            values = data[location]  # Access the values for the given location (Barrel or Endcaps)
+            # pileups = data[f'{location}_pileup']  # Access the pileup weights for the given location
+            ax.hist(values, bins=bins, density=density, weights=pileups, histtype=histtype, edgecolor=colors[num], label=key)  # Plot histogram with correct parameters
+            num += 1
+    else:
+        for key, data in dictionary.items():
+            values = data[location]  # Access the values for the given location (Barrel or Endcaps)
+            ax.hist(values, bins=bins, density=density, histtype=histtype, edgecolor=colors[num], label=key)  # Plot histogram with correct parameters
+            num += 1
+
+# np.histogram takes an array as an input and outputs the values of a histogram and the bin edges
+# bins defines array of bin edges including the rightmost edge
+            
+# Plot 1: Histogram for Barrel
+fig_barrel, ax_barrel = plt.subplots(figsize=(8, 6))
+histograms(ax_barrel, combined_MC_dict, 'Barrel', edgecolors_combined_MC, True)
+ax_barrel.hist(bkg_barrel_concat, bins=bins, density=True, histtype=histtype, edgecolor='k', label='Background Data')
+
+ax_barrel.set_xlabel('Number of RoIs')
+ax_barrel.set_ylabel('Fraction of Events')
+ax_barrel.set_title('Histogram for Barrel')
+
+ax_barrel.set_xticks(major_ticks_x)
+ax_barrel.set_xticks(minor_ticks_x, minor=True)
+ax_barrel.set_yticks(major_ticks_y)
+ax_barrel.set_yticks(minor_ticks_y, minor=True)
+
+ax_barrel.set_xlim(2, 14)
+ax_barrel.legend()
+ax_barrel.tick_params(axis=axis, direction=direction, length=length_major, which='major', top=top, right=right)
+ax_barrel.tick_params(axis=axis, direction=direction, length=length_minor, which='minor', top=top, right=right)
+
+
+plt.tight_layout()
+plt.savefig('Histogram_Barrel.pdf')
+plt.close()
+
+# Plot 2: Histogram for Endcaps
+fig_endcaps, ax_endcaps = plt.subplots(figsize=(8, 6))
+histograms(ax_endcaps, combined_MC_dict, 'Endcaps', edgecolors_combined_MC, True)
+ax_endcaps.hist(bkg_endcaps_concat, bins=bins, density=True, histtype=histtype, edgecolor='k', label='Background Data')
+
+ax_endcaps.set_xlabel('Number of RoIs')
+ax_endcaps.set_ylabel('Fraction of Events')
+ax_endcaps.set_title('Histogram for Endcaps')
+
+ax_endcaps.set_xticks(major_ticks_x)
+ax_endcaps.set_xticks(minor_ticks_x, minor=True)
+ax_endcaps.set_yticks(major_ticks_y)
+ax_endcaps.set_yticks(minor_ticks_y, minor=True)
+ax_endcaps.set_xlim(2, 14)
+
+ax_endcaps.legend()
+ax_endcaps.tick_params(axis=axis, direction=direction, length=length_major, which='major', top=top, right=right)
+ax_endcaps.tick_params(axis=axis, direction=direction, length=length_minor, which='minor', top=top, right=right)
+
+plt.tight_layout()
+plt.savefig('Histogram_Endcaps.pdf')
+plt.close()
+
+def signal_to_background(ax, dictionary, location, colors, bkg):
+    num = 0
+    bkg_hist, _ = np.histogram(bkg, bins=bins, density=True)
+    bkg_hist_with_min_value = np.where(bkg_hist == 0, 1e-10, bkg_hist)
+    for key, data in dictionary.items():
+        values = data[location] 
+        pileups = data[f'{location}_pileup']
+        signal_hist, _ = np.histogram(values, bins=bins, weights=pileups, density=True)
+        ratio = np.where(bkg_hist_with_min_value == 1e-10, 0, np.divide(signal_hist, bkg_hist_with_min_value))
+        ax.step(bins[:-1], ratio, where='mid', color=colors[num], label=key)
+        num +=1
+
+major_ticks_x0 = np.arange(0, 14, 2)
+minor_ticks_x0 = np.arange(0, 14, 0.5)
+
+# Hist 3
+fig_barrel_ratio, ax_barrel_ratio = plt.subplots(figsize=(8, 6))
+signal_to_background(ax_barrel_ratio, combined_MC_dict, 'Barrel', edgecolors_combined_MC, bkg_barrel_concat)
+
+ax_barrel_ratio.set_xlabel('Number of RoIs')
+ax_barrel_ratio.set_ylabel('Fraction of Events')
+ax_barrel_ratio.set_yscale('log')
+ax_barrel_ratio.set_title('Histogram for Barrel Signal/BKG Ratio')
+
+ax_barrel_ratio.set_xticks(major_ticks_x0)
+ax_barrel_ratio.set_xticks(minor_ticks_x0, minor=True)
+# ax_barrel_ratio.set_yticks(np.arange(0, 3000, 250))
+# ax_barrel_ratio.set_yticks(np.arange(0, 3000, 62.5), minor=True)
+
+ax_barrel_ratio.set_xlim(2, 14)
+ax_barrel_ratio.set_ylim(1, 3000)
+
+ax_barrel_ratio.legend()
+ax_barrel_ratio.tick_params(axis=axis, direction=direction, length=length_major, which='major', top=top, right=right)
+ax_barrel_ratio.tick_params(axis=axis, direction=direction, length=length_minor, which='minor', top=top, right=right)
+
+plt.tight_layout()
+plt.savefig('Histogram_Barrel_Ratio.pdf')
+plt.close()
+
+# Hist 4
+fig_endcaps_ratio, ax_endcaps_ratio = plt.subplots(figsize=(8, 6))
+signal_to_background(ax_endcaps_ratio, combined_MC_dict, 'Endcaps', edgecolors_combined_MC, bkg_endcaps_concat)
+
+ax_endcaps_ratio.set_xlabel('Number of RoIs')
+ax_endcaps_ratio.set_ylabel('Fraction of Events')
+ax_endcaps_ratio.set_yscale('log')
+
+ax_endcaps_ratio.set_title('Histogram for Endcaps Signal/BKG Ratio')
+
+ax_endcaps_ratio.set_xticks(major_ticks_x0)
+ax_endcaps_ratio.set_xticks(minor_ticks_x0, minor=True)
+# ax_endcaps_ratio.set_yticks(np.arange(0, 2000, 250))
+# ax_endcaps_ratio.set_yticks(np.arange(0, 2000, 62.5), minor=True)
+ax_endcaps_ratio.set_xlim(2, 14)
+ax_endcaps_ratio.set_ylim(1, 2000) # log-scale means can't set lower lim to 0
+
+ax_endcaps_ratio.legend()
+ax_endcaps_ratio.tick_params(axis=axis, direction=direction, length=length_major, which='major', top=top, right=right)
+ax_endcaps_ratio.tick_params(axis=axis, direction=direction, length=length_minor, which='minor', top=top, right=right)
+
+plt.tight_layout()
+plt.savefig('Histogram_Endcaps_Ratio.pdf')
+plt.close()
